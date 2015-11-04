@@ -19,14 +19,16 @@ struct {
     { "ifndef" , PREP_IFNDEF  },
     { "elif"   , PREP_ELIF    },
     { "undef"  , PREP_UNDEF   },
-    { "pragma" , PREP_PRAGMA  }
+    { "pragma" , PREP_PRAGMA  },
+    { "error"  , PREP_ERROR   },
+    { "line"   , PREP_LINE    }
 };
 
 void line_free (void *);
 void token_free(void *);
 
-void if_state_free(void *);
-if_state *if_state_alloc();
+/*void if_state_free(void *);
+if_state *if_state_alloc();*/
 
 void   string_free   (void *);
 int8_t string_compare(void *, void *);
@@ -41,9 +43,9 @@ int8_t process_directive(preprocessor_state *);
 int8_t _retoken_ifdef(preprocessor_state *, logical_line *);
 
 void    if_free(void *);
-void    if_push(preprocessor_state *, int8_t);
-uint8_t if_top(preprocessor_state *);
-uint8_t if_pop(preprocessor_state *);
+void    if_push(preprocessor_state *, uint8_t);
+uint8_t if_top (preprocessor_state *);
+uint8_t if_pop (preprocessor_state *);
 
 preprocessor_state *preprocess_init() {
     preprocessor_state *state;
@@ -106,6 +108,8 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
         message_out(MESSAGE_ERROR, file_name, 0, 0, "File not found.");
         return -1;
     }
+
+    if_push(state, PREP_IF_BASELINE);
 
     generate_line(state, 1, file_name);
 
@@ -496,7 +500,7 @@ void if_push(preprocessor_state *state, uint8_t if_state) {
 uint8_t if_pop(preprocessor_state *state) {
     uint8_t t;
     t = if_top(state);
-    list_trim(state->if_stack, state->if_stack->count - 1);
+    lst_trim(state->if_stack, state->if_stack->count - 1);
 
     return t;
 }
@@ -515,7 +519,7 @@ int8_t process_directive(preprocessor_state *state) {
     uint32_t token_count;
     uint8_t  die;
 
-    uint8_t if_result;
+    int8_t if_result;
 
     char *_string;
 
@@ -616,26 +620,82 @@ int8_t process_directive(preprocessor_state *state) {
                 if (state->directive_line == PREP_IF) {
                     if_push(state, PREP_IF_MATCHING);
                 }
+                /* Check for unmatched directives. In this case, #elif is the only one we're worried about. */
+                if (if_top(state) == PREP_IF_BASELINE) {
+                    message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "Unmatched #elif.");
+                    return -1;
+                }
 
-                /* This line is for evaluating defined() */
+                {
+                    uint8_t if_state;
+                    if_state = if_pop(state);
+
+                    if_result = handle_if(state, _line);
+                    if (if_result < 0) {
+                        message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "#if evaluation failed.");
+                        return -1;
+                    }
+
+                    if (if_result > 0 && if_state == PREP_IF_MATCHING) {
+                        /* #if evaluated to true (1L), and we haven't matched yet.
+                         * Signal a text inclusion. */
+                        if_push(state, PREP_IF_INCLUDING);
+                    }
+                    else if (if_result > 0 && if_state == PREP_IF_INCLUDING) {
+                        /* #if evaluated to true (1L), and we have matched.
+                         * Signal that we're ready for #endif. */
+                        if_push(state, PREP_IF_ENDING);
+                    }
+                    else {
+                        /* #if evaluated to false (0L).
+                         * Signal that we're still looking */
+                        if_push(state, PREP_IF_MATCHING);
+                    }
+                }
+
+                /* This line is for evaluating defined()... */
                 /*result = hmp_get(state->macros, lst_index(_line->tokens, 2) );*/
                 break;
             case PREP_ELSE:
-                /* Warn about additional tokens */
+                /* Warn about additional tokens. */
                 if (token_count > 2) {
                     message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "Additional tokens at end of #else directive (ignored).");
                 }
+                if_result = if_pop(state);
+                if (if_result == PREP_IF_BASELINE) {
+                    message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "Unmatched #else.");
+                    return -1;
+                }
+
                 /* If we've matched a block in this group already, continue / switch to scanning. */
+                if (if_result == PREP_IF_INCLUDING || if_result == PREP_IF_ENDING) {
+                    if_push(state, PREP_IF_ENDING);
+                }
                 /* If we haven't, switch to inclusion. */
+                else {
+                    if_push(state, PREP_IF_INCLUDING);
+                }
+                
                 break;
             case PREP_ENDIF:
-                /* Warn about additional tokens */
+                /* Warn about additional tokens. */
                 if (token_count > 2) {
                     message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "Additional tokens at end of #endif directive (ignored).");
                 }
 
-                /* Pop #if state */
+                /* Pop #if state. */
+                if_result = if_pop(state);
+                /* Check for matched directives. */
+                if (if_result == PREP_IF_BASELINE) {
+                    message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "Unmatched #endif.");
+                    return -1;
+                }
 
+                break;
+            case PREP_ERROR:
+                message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "#error");
+                return -1;
+            case PREP_LINE:
                 break;
             default:
                 break;
@@ -676,16 +736,18 @@ int8_t _retoken_ifdef(preprocessor_state *state, logical_line *_line) {
         _token = _token_alloc(0, 0, TOT_PUNCTUATOR, "!", 2);
         lst_insert(tokens, _token, token_count++);
     }
-    /* Insert `defined (` tokens */
+    /* Insert `defined` token */
     _token = _token_alloc(0, 0, TOT_IDENTIFIER, "defined", 8);
     lst_insert(tokens, _token, token_count++);
-    _token = _token_alloc(0, 0, TOT_PUNCTUATOR, "(", 2);
-    lst_insert(tokens, _token, token_count++);
+    /*_token = _token_alloc(0, 0, TOT_PUNCTUATOR, "(", 2);
+    lst_insert(tokens, _token, token_count++); */
     /* Keep macro name */
     token_count++;
     /* Append `)` token */
-    _token = _token_alloc(0, 0, TOT_PUNCTUATOR, ")", 2);
-    lst_insert(tokens, _token, token_count++);
+    /*_token = _token_alloc(0, 0, TOT_PUNCTUATOR, ")", 2);
+    lst_insert(tokens, _token, token_count++);*/
+
+    state->directive_line = PREP_IF;
 
     return token_count;
 }

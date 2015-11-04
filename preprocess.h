@@ -32,8 +32,10 @@
 #define PREP_IFNDEF 20
 #define PREP_UNDEF  22
 #define PREP_PRAGMA 32
+#define PREP_ERROR  34
+#define PREP_LINE   36
 
-#define DIRECTIVE_COUNT 10
+#define DIRECTIVE_COUNT 12
 
 #define TOKEN_BUFFER_SIZE 64
 #define TOKEN_LIST_SIZE   64

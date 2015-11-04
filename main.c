@@ -12,7 +12,7 @@ void print_macros(hash_map *);
 int main(int argc, char **argv) {
     list *lines;
     preprocessor_state *state = preprocess_init();
-    lines = preprocess(state, argv[1]);
+    preprocess(state, argv[1]);
 
     print_lines(state->lines);
     /* print_macros(state->macros); */

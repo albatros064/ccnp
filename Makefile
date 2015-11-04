@@ -9,4 +9,4 @@ preprocess: $(objects)
 
 
 clean:
-	rm *.o preprocess
+	-rm *.o preprocess
