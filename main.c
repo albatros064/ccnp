@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
 	lines = preprocess(state, argv[1]);
 
 	print_lines(state->lines);
-	//print_macros(state->macros);
+	/* print_macros(state->macros); */
 
 	return 0;
 }
