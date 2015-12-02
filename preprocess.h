@@ -41,6 +41,12 @@
 
 #define TOKEN_LIST_QUANTUM 8
 
+#define PREP_IF_STACK_QUANTUM 8
+#define PREP_IF_BASELINE  0
+#define PREP_IF_MATCHING  1
+#define PREP_IF_INCLUDING 2
+#define PREP_IF_ENDING    3
+
 typedef struct {
     int   char_offset;
     int   line_offset;
@@ -69,6 +75,8 @@ typedef struct {
                   suppress_c;
     
     list *lines;
+
+    list *if_stack;
 
     hash_map *macros;
     hash_map *directives;

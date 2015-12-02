@@ -36,6 +36,7 @@ int8_t lst_is_end(list_iterator *);
 
 int8_t lst_insert (list *, void *, uint32_t);
 int8_t lst_splice (list *, list *, uint32_t, uint32_t);
+int8_t lst_trim   (list *, uint32_t);
 int8_t lst_append (list *, void *);
 int8_t lst_prepend(list *, void *);
 

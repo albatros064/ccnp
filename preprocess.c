@@ -25,8 +25,12 @@ struct {
 void line_free (void *);
 void token_free(void *);
 
+void if_state_free(void *);
+if_state *if_state_alloc();
+
 void   string_free   (void *);
 int8_t string_compare(void *, void *);
+
 void     macro_free(void *);
 uint32_t macro_hash(void *, uint32_t);
 void     directive_free(void *);
@@ -35,6 +39,11 @@ uint32_t directive_hash(void *, uint32_t);
 int8_t macro_replacement(preprocessor_state *, token *, int32_t);
 int8_t process_directive(preprocessor_state *);
 int8_t _retoken_ifdef(preprocessor_state *, logical_line *);
+
+void    if_free(void *);
+void    if_push(preprocessor_state *, int8_t);
+uint8_t if_top(preprocessor_state *);
+uint8_t if_pop(preprocessor_state *);
 
 preprocessor_state *preprocess_init() {
     preprocessor_state *state;
@@ -50,9 +59,11 @@ preprocessor_state *preprocess_init() {
     state->token_overflow = 0;
     state->token_length   = 0;
 
-    state->directive_line = 0;
+    state->directive_line = PREP_NONE;
 
-    state->lines      = lst_create(&line_free, TOKEN_LIST_QUANTUM);
+    state->if_stack   = lst_create(&if_free, PREP_IF_STACK_QUANTUM);
+
+    state->lines      = lst_create(&line_free,     TOKEN_LIST_QUANTUM   );
     state->macros     = hmp_create(&string_free, &macro_free,     &string_compare, &macro_hash,     256);
 
     /* Initialize the preprocessor directives */
@@ -474,6 +485,27 @@ int8_t generate_token(preprocessor_state *state, unsigned int line_number, unsig
     return 0;
 }
 
+void if_free(void *data) {
+    free(data);
+}
+void if_push(preprocessor_state *state, uint8_t if_state) {
+    uint8_t *t;
+    t = (uint8_t *) malloc(sizeof(uint8_t));
+    lst_append(state->if_stack, t);
+}
+uint8_t if_pop(preprocessor_state *state) {
+    uint8_t t;
+    t = if_top(state);
+    list_trim(state->if_stack, state->if_stack->count - 1);
+
+    return t;
+}
+uint8_t if_top(preprocessor_state *state) {
+    uint8_t *t;
+    t = (uint8_t *) lst_tail(state->if_stack);
+    return *t;
+}
+
 
 int8_t process_directive(preprocessor_state *state) {
     logical_line *_line ;
@@ -483,7 +515,12 @@ int8_t process_directive(preprocessor_state *state) {
     uint32_t token_count;
     uint8_t  die;
 
+    uint8_t if_result;
+
     char *_string;
+
+    char *error_text;
+    char *warning_text;
 
     _string = 0;
     die = 0;
@@ -538,40 +575,67 @@ int8_t process_directive(preprocessor_state *state) {
                 hmp_put(state->macros, (void *) _string, (void *) _macro);
                 break;
             case PREP_IFDEF:
+                /* Handled mostly the same way as #ifndef. Fall through. */
             case PREP_IFNDEF:
-                {
-                    char *error_text, *warning_text;
-                    void *result;
-
-                    if (state->directive_line == PREP_IFDEF) {
-                        error_text = "No macro in #ifdef directive.";
-                        warning_text = "Additional tokens at end of #ifdef directive (ignored).";
-                    }
-                    else {
-                        error_text = "No macro in #ifndef directive.";
-                        warning_text = "Additional tokens at end of #ifndef directive (ignored).";
-                    }
-
-                    if (token_count < 3) {
-                        message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, error_text);
-                        return -1;
-                    }
-                    if (token_count > 3) {
-                        message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, warning_text);
-                    }
-
-                    token_count = _retoken_ifdef(state, _line);
+                /* Prepare warning and error strings */
+                if (state->directive_line == PREP_IFDEF) {
+                    error_text = "No macro in #ifdef directive.";
+                    warning_text = "Additional tokens at end of #ifdef directive (ignored).";
                 }
+                else {
+                    error_text = "No macro in #ifndef directive.";
+                    warning_text = "Additional tokens at end of #ifndef directive (ignored).";
+                }
+
+                /* If we're missing required tokens, error out. */
+                if (token_count < 3) {
+                    message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, error_text);
+                    return -1;
+                }
+                /* Warn about additional tokens */
+                if (token_count > 3) {
+                    message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, warning_text);
+                }
+
+                /* Replace this token stream with a #if-friendly token stream using defined(), and update token count. */
+                token_count = _retoken_ifdef(state, _line);
+
                 /* Fall through to #if handler */
+            case PREP_ELIF:
+                /* Handled mostly the same way as #if. Fall through. */
             case PREP_IF:
                 message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "#if implimentation incomplete.");
 
+                /* Error out on missing required tokens. */
                 if (token_count < 3) {
                     message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "Not enough tokens in #if directive.");
                     return -1;
                 }
+
+                /* Push a new #if state if we need one. */
+                if (state->directive_line == PREP_IF) {
+                    if_push(state, PREP_IF_MATCHING);
+                }
+
                 /* This line is for evaluating defined() */
                 /*result = hmp_get(state->macros, lst_index(_line->tokens, 2) );*/
+                break;
+            case PREP_ELSE:
+                /* Warn about additional tokens */
+                if (token_count > 2) {
+                    message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "Additional tokens at end of #else directive (ignored).");
+                }
+                /* If we've matched a block in this group already, continue / switch to scanning. */
+                /* If we haven't, switch to inclusion. */
+                break;
+            case PREP_ENDIF:
+                /* Warn about additional tokens */
+                if (token_count > 2) {
+                    message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "Additional tokens at end of #endif directive (ignored).");
+                }
+
+                /* Pop #if state */
+
                 break;
             default:
                 break;
@@ -604,6 +668,7 @@ int8_t _retoken_ifdef(preprocessor_state *state, logical_line *_line) {
 
     /* Trim off spare (ignored) tokens */
     if (_line->tokens->count > 3) {
+        lst_trim(tokens, 3);
     }
 
     if (state->directive_line == PREP_IFNDEF) {
@@ -611,7 +676,7 @@ int8_t _retoken_ifdef(preprocessor_state *state, logical_line *_line) {
         _token = _token_alloc(0, 0, TOT_PUNCTUATOR, "!", 2);
         lst_insert(tokens, _token, token_count++);
     }
-    /* Append `defined (` tokens */
+    /* Insert `defined (` tokens */
     _token = _token_alloc(0, 0, TOT_IDENTIFIER, "defined", 8);
     lst_insert(tokens, _token, token_count++);
     _token = _token_alloc(0, 0, TOT_PUNCTUATOR, "(", 2);

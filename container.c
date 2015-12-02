@@ -133,6 +133,17 @@ int8_t lst_insert(list *_list, void *_datum, uint32_t offset) {
     return 0;
 }
 
+int8_t lst_trim(list *_list, uint32_t target_length) {
+    if (target_length > _list->count || target_length < 0) {
+        return -1;
+    }
+
+    while (_list->count > target_length) {
+        _list->_free(_list->_data[--_list->count]);
+    }
+    return 0;
+}
+
 int8_t lst_splice(list *_list, list *_elements, uint32_t offset, uint32_t remove) {
     int32_t length_delta;
     uint32_t new_length;
