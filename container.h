@@ -8,18 +8,18 @@ typedef int8_t   (*container_compare)(void *, void *);
 typedef uint32_t (*container_hash   )(void *, uint32_t);
 
 typedef struct {
-	uint32_t count;
+    uint32_t count;
 
-	void **_data;
+    void **_data;
 
-	uint16_t _quantum;
-	uint32_t _capacity;
-	container_free    _free;
+    uint16_t _quantum;
+    uint32_t _capacity;
+    container_free    _free;
 } list;
 
 typedef struct {
-	list *_list;
-	uint32_t _index;
+    list *_list;
+    uint32_t _index;
 } list_iterator;
 
 list *lst_create(container_free, uint16_t);
@@ -41,28 +41,28 @@ int8_t lst_prepend(list *, void *);
 
 
 typedef struct {
-	void *key;
-	void *datum;
+    void *key;
+    void *datum;
 } hash_map_pair;
 struct _hash_map_pair {
-	hash_map_pair _pair;
-	struct _hash_map_pair *_next;
+    hash_map_pair _pair;
+    struct _hash_map_pair *_next;
 };
 typedef struct {
-	uint32_t count;
-	struct _hash_map_pair **_buckets;
-	uint32_t _capacity;
+    uint32_t count;
+    struct _hash_map_pair **_buckets;
+    uint32_t _capacity;
 
-	container_free    _free_key;
-	container_free    _free_datum;
-	container_compare _compare;
-	container_hash    _hash;
+    container_free    _free_key;
+    container_free    _free_datum;
+    container_compare _compare;
+    container_hash    _hash;
 } hash_map;
 
 typedef struct {
-	hash_map *_map;
-	uint32_t _index;
-	struct _hash_map_pair *_next;
+    hash_map *_map;
+    uint32_t _index;
+    struct _hash_map_pair *_next;
 } hash_map_iterator;
 
 hash_map *hmp_create(container_free, container_free, container_compare, container_hash, uint16_t);

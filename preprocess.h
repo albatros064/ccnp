@@ -42,42 +42,42 @@
 #define TOKEN_LIST_QUANTUM 8
 
 typedef struct {
-	int   char_offset;
-	int   line_offset;
+    int   char_offset;
+    int   line_offset;
 
-	unsigned char type;
-	char *content;
-	int   length;
+    unsigned char type;
+    char *content;
+    int   length;
 } token;
 
 typedef struct  {
-	int    start_line;
-	char  *file;
+    int    start_line;
+    char  *file;
 
-	list *tokens;
+    list *tokens;
 } logical_line;
 
 typedef struct {
-	unsigned char token_type,
-	              last_type;
-	unsigned char token_overflow;
-	int   token_length;
-	char  token_buffer[TOKEN_BUFFER_SIZE];
+    unsigned char token_type,
+                  last_type;
+    unsigned char token_overflow;
+    int   token_length;
+    char  token_buffer[TOKEN_BUFFER_SIZE];
 
-	unsigned char directive_line;
-	unsigned char generate,
-	              suppress_c;
-	
-	list *lines;
+    unsigned char directive_line;
+    unsigned char generate,
+                  suppress_c;
+    
+    list *lines;
 
-	hash_map *macros;
-	hash_map *directives;
+    hash_map *macros;
+    hash_map *directives;
 } preprocessor_state;
 
 typedef struct {
-	uint8_t type;
-	char  **args;
-	list   *tokens;
+    uint8_t type;
+    char  **args;
+    list   *tokens;
 } macro;
 
 preprocessor_state *preprocess_init();

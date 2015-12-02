@@ -14,32 +14,32 @@ typedef int (*collection_compare)(void*,void*);
 
 
 struct _linked_list_node {
-	void *data;
-	struct _linked_list_node *tail;
+    void *data;
+    struct _linked_list_node *tail;
 };
 
 typedef struct {
-	struct _linked_list_node *head;
-	struct _linked_list_node *tail;
+    struct _linked_list_node *head;
+    struct _linked_list_node *tail;
 
-	unsigned char flags;
+    unsigned char flags;
 
-	collection_free    free;
-	collection_compare compare;
+    collection_free    free;
+    collection_compare compare;
 } linked_list;
 
 struct _binary_tree_node {
-	void *data;
-	struct _binary_tree_node *left;
-	struct _binary_tree_node *right;
+    void *data;
+    struct _binary_tree_node *left;
+    struct _binary_tree_node *right;
 };
 typedef struct {
-	struct _binary_tree_node *root;
+    struct _binary_tree_node *root;
 
-	unsigned char flags;
+    unsigned char flags;
 
-	collection_free    free;
-	collection_compare compare;
+    collection_free    free;
+    collection_compare compare;
 } binary_tree;
 
 

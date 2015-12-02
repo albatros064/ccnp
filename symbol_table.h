@@ -4,7 +4,7 @@
 #include "cointainer.h"
 
 typedef struct {
-	hash_map *_map;
+    hash_map *_map;
 } symbol_table;
 
 
