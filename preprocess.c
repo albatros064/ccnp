@@ -53,7 +53,7 @@ preprocessor_state *preprocess_init() {
 	state->lines      = lst_create(&line_free, TOKEN_LIST_QUANTUM);
 	state->macros     = hmp_create(&string_free, &macro_free,     &string_compare, &macro_hash,     256);
 
-	// Initialize the preprocessor directives
+	/* Initialize the preprocessor directives */
 	state->directives = hmp_create(&string_free, &directive_free, &string_compare, &directive_hash, DIRECTIVE_COUNT);
 	for (i = 0; i < DIRECTIVE_COUNT; i++) {
 		k =  _directives[i].label;
@@ -117,7 +117,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 
 		generate = suppress = 0;
 	
-		// Proceed with tokenization
+		/* Proceed with tokenization */
 		switch (state->token_type) {
 			case TOT_CHARACTER:
 				if (c == '\'' && (co[0] != '\\' || (co[0] == '\\' && co[1] == '\\') ) ) {
@@ -142,7 +142,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 				break;
 			case TOT_IDENTIFIER:
 				if (isalnum(c) || c == '_' || (c == '$' && DOLLAR_IS_LETTER) ) {
-					// Proceed	
+					/* Proceed */
 				}
 				else if (ispunct(c) && c != '$' && c != '@') {
 					generate = 1;
@@ -232,7 +232,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 					}
 					else if (state->token_length == 2) {
 						if (c == '=' && (state->token_buffer[1] == '<' || state->token_buffer[1] == '>') && tb != '-') {
-							// continue
+							/* continue */
 						}
 						else {
 							generate = 1;
@@ -245,7 +245,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 						    tb == '*' || tb == '/' ||
 						    tb == '%' || tb == '&' ||
 						    tb == '^' || tb == '|') {
-							// continue
+							/* continue */
 						}
 						else {
 							generate = 1;
@@ -258,10 +258,10 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 						   c == '|' ||
 						   c == '&') &&
 						  c == tb) {
-						// continue
+						/* continue */
 					}
 					else if (c == '>' && tb == '-') {
-						// continue
+						/* continue */
 					}
 					else {
 						generate = 1;
@@ -318,12 +318,12 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 				break;
 		}
 		
-		// Check that we won't overrun our token buffer
+		/* Check that we won't overrun our token buffer */
 		if (state->token_length >= TOKEN_BUFFER_SIZE) {
 			state->token_overflow |= 1;
 		}
 		if (generate || state->token_overflow & 1) {
-			// Create a token
+			/* Create a token */
 			if (generate_token(state, tline_number, tchar_number) ) {
 				return -1;
 			}
@@ -342,7 +342,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 		}
 
 		if (c == '\n') {
-			// Handle preprocessor directive lines
+			/* Handle preprocessor directive lines */
 			
 			if (state->directive_line) {
 				logical_line *_line ;
@@ -408,34 +408,36 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 							break;
 						case PREP_IFDEF:
 						case PREP_IFNDEF:
-							char *error_text, *warning_text;
-							void *result;
+                            {
+                                char *error_text, *warning_text;
+                                void *result;
 
-							if (state->directive_line == PREP_IFDEF) {
-								error_text = "No macro in #ifdef directive.";
-								warning_text = "Additional tokens at end of #ifdef directive (ignored).";
-							}
-							else {
-								error_text = "No macro in #ifndef directive.";
-								warning_text = "Additional tokens at end of #ifndef directive (ignored).";
-							}
+                                if (state->directive_line == PREP_IFDEF) {
+                                    error_text = "No macro in #ifdef directive.";
+                                    warning_text = "Additional tokens at end of #ifdef directive (ignored).";
+                                }
+                                else {
+                                    error_text = "No macro in #ifndef directive.";
+                                    warning_text = "Additional tokens at end of #ifndef directive (ignored).";
+                                }
 
-							if (token_count < 3) {
-								message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, error_text);
-								return -1;
-							}
-							if (token_count > 3) {
-								message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, warning_text);
-							}
+                                if (token_count < 3) {
+                                    message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, error_text);
+                                    return -1;
+                                }
+                                if (token_count > 3) {
+                                    message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, warning_text);
+                                }
 
-							result = hmp_get(state->macros, lst_index(_line->tokens, 2) );
+                                result = hmp_get(state->macros, lst_index(_line->tokens, 2) );
 
-							if (result && state->directive_line == PREP_IFDEF) {
-								
-							}
-							else if (!result && state->directive_line == PREP_IFNDEF) {
-								
-							}
+                                if (result && state->directive_line == PREP_IFDEF) {
+                                    
+                                }
+                                else if (!result && state->directive_line == PREP_IFNDEF) {
+                                    
+                                }
+                            }
 							break;
 						default:
 							break;
@@ -461,8 +463,8 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 			generate_line(state, line_number, file_name);
 		}
 
-		// Shift chars
-		//co[2] = co[1];
+		/* Shift chars */
+		/*co[2] = co[1];*/
 		co[1] = co[0];
 		co[0] = c;
 
@@ -479,7 +481,7 @@ int8_t generate_line(preprocessor_state *state, unsigned int line, char *file) {
 
 	new_line = (logical_line *) lst_tail(state->lines);
 
-	// Short-circuit on empty line to save memory
+	/* Short-circuit on empty line to save memory */
 	if (new_line && !new_line->tokens->count) {
 		new_line->start_line = line;
 		new_line->file = file;
@@ -510,13 +512,13 @@ int8_t generate_token(preprocessor_state *state, unsigned int line_number, unsig
 	directive_line = state->directive_line;
 
 	if (state->token_overflow & 2) {
-		// Append to the most recent token
+		/* Append to the most recent token */
 		_token = (token *) lst_tail(_line->tokens);
 		copy_offset = _token->length;
 		token_length = copy_offset + state->token_length;
 	}
 	else {
-		// Create a new token
+		/* Create a new token */
 		_token = (token *) malloc(sizeof(token) );
 		_token->char_offset = char_number;
 		_token->line_offset = line_number;
@@ -633,7 +635,7 @@ uint32_t macro_hash(void *_key, uint32_t max) {
 		hash += key[i] - 36;
 	}
 
-	hash %= 256; // Ignore the requested hash size
+	hash %= 256; /* Ignore the requested hash size */
 
 	return hash;
 }
@@ -643,7 +645,7 @@ int8_t macro_compare(void *left, void *right) {
 }
 
 void directive_free(void *_) {
-	// Do nothing...
+	/* Do nothing... */
 }
 uint32_t directive_hash(void *_key, uint32_t size) {
 	char *key;

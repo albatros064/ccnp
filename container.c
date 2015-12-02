@@ -265,7 +265,7 @@ int8_t hmp_put(hash_map *_map, void *_key, void *_datum) {
 
 	while (*node) {
 		if ( (_map->_compare)( (*node)->_pair.key, _key) == 0) {
-			// We found the key
+			/* We found the key */
 			(*node)->_pair.datum = _datum;
 			return 1;
 		}
