@@ -32,6 +32,7 @@ void *lst_head (list *);
 void *lst_tail (list *);
 void *lst_next (list_iterator *);
 void *lst_prev (list_iterator *);
+void *lst_peek (list_iterator *, uint32_t);
 int8_t lst_is_end(list_iterator *);
 
 int8_t lst_insert (list *, void *, uint32_t);

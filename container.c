@@ -100,6 +100,14 @@ void *lst_prev(list_iterator *iterator) {
     return iterator->_list->_data[iterator->_index--];
 }
 
+void *lst_peek(list_iterator *iterator, uint32_t offset) {
+    if (iterator->_index + offset >= iterator->_list->count) {
+        return 0;
+    }
+
+    return iterator->_list->_data[iterator->_index + offset];
+}
+
 int8_t lst_is_end(list_iterator *iterator) {
     if (iterator->_index >= iterator->_list->count) {
         return 1;

@@ -38,7 +38,7 @@ uint32_t macro_hash(void *, uint32_t);
 void     directive_free(void *);
 uint32_t directive_hash(void *, uint32_t);
 
-int8_t macro_replacement(preprocessor_state *, token *, int32_t);
+int8_t macro_replacement(preprocessor_state *, token *, int32_t, uint8_t);
 int8_t process_directive(preprocessor_state *);
 int8_t _retoken_ifdef(preprocessor_state *, logical_line *);
 
@@ -46,6 +46,8 @@ void    if_free(void *);
 void    if_push(preprocessor_state *, uint8_t);
 uint8_t if_top (preprocessor_state *);
 uint8_t if_pop (preprocessor_state *);
+
+int8_t handle_if(preprocessor_state *, logical_line *);
 
 preprocessor_state *preprocess_init() {
     preprocessor_state *state;
@@ -268,13 +270,13 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
                             generate = 1;
                         }
                     }
-                    else if ( (c == '<' ||
-                               c == '>' ||
-                           c == '+' ||
-                           c == '-' ||
-                           c == '|' ||
-                           c == '&') &&
-                          c == tb) {
+                    else if ((c == '<' ||
+                              c == '>' ||
+                              c == '+' ||
+                              c == '-' ||
+                              c == '|' ||
+                              c == '&') &&
+                            c == tb) {
                         /* continue */
                     }
                     else if (c == '>' && tb == '-') {
@@ -481,7 +483,7 @@ int8_t generate_token(preprocessor_state *state, unsigned int line_number, unsig
         }
     }
     else if (!state->directive_line && _token->type == TOT_IDENTIFIER) {
-        macro_replacement(state, _token, -1);
+        macro_replacement(state, _token, -1, 0);
     }
 
     state->directive_line = directive_line;
@@ -718,6 +720,87 @@ int8_t process_directive(preprocessor_state *state) {
     return 0;
 }
 
+int8_t handle_if(preprocessor_state *state, logical_line *_line) {
+    token         *_token;
+    list_iterator *tokens;
+    int32_t        token_count;
+
+    tokens = lst_iterator(_line->tokens);
+
+    /* Eat preprocessor tokens */
+    lst_next(tokens);
+    lst_next(tokens);
+
+    /* Keep track of how many tokens we have right now */
+    token_count = _line->tokens->count;
+
+    while (!lst_is_end(tokens)) {
+        _token = (token *) lst_next(tokens);
+        switch (_token->type) {
+          case TOT_IDENTIFIER:
+            if (!strcmp(_token->content, "defined")) {
+                /* check for optional parenthesis surrounding a required identifier */
+                token *next;
+                uint8_t guarded;
+
+                guarded = 0;
+                next = (token *) lst_peek(tokens, 0);
+                if (next && next->type == TOT_PUNCTUATOR && strcmp(next->content, "(") == 0) {
+                    next = (token *) lst_peek(tokens, 2);
+                    if (next && next->type == TOT_PUNCTUATOR && strcmp(next->content, ")") == 0) {
+                        next = (token *) lst_peek(tokens, 1);
+                        guarded = 1;
+                    }
+                    else {
+                        return -1;
+                    }
+                }
+
+                if (next && next->type == TOT_IDENTIFIER) {
+                    list  *_replacements;
+                    token *_replacement_token;
+                    macro *_macro;
+
+                    _replacements = lst_create(&token_free, TOKEN_LIST_QUANTUM);
+                    _macro = (macro *) hmp_get(state->macros, (void *) next->content);
+                    if (_macro) {
+                        /* 1L */
+                        _replacement_token = _token_alloc(0, 0, TOT_NUMBER, "1L", 2);
+                    }
+                    else {
+                        /* 0L */
+                        _replacement_token = _token_alloc(0, 0, TOT_NUMBER, "0L", 2);
+                    }
+
+                    lst_append(_replacements, _replacement_token);
+                    lst_splice(_line->tokens, _replacements, tokens->_index - 1, guarded ? 3 : 1);
+                }
+                else {
+                    return -1;
+                }
+            }
+            else {
+                macro_replacement(state, _token, tokens->_index - 1, 1);
+            }
+            break;
+          case TOT_PUNCTUATOR:
+            /* This should filter out any inappropriate punctuators, I guess. */
+            break;
+          case TOT_STRING:
+            /* Throw an error. We don't want no strings around these parts. */
+            return -1;
+            break;
+          case TOT_CHARACTER:
+            /* This should just be treated as an int, so... replace it with a string representation of its int value? I'm not sure. */
+            break;
+          default:
+            break;
+        }
+    }
+
+    return 0;
+}
+
 int8_t _retoken_ifdef(preprocessor_state *state, logical_line *_line) {
     int8_t token_count;
     list *tokens;
@@ -753,7 +836,7 @@ int8_t _retoken_ifdef(preprocessor_state *state, logical_line *_line) {
 }
 
 
-int8_t _macro_replacement(hash_map *macros, list *tokens, token *_in_token, uint8_t self_reference) {
+int8_t _macro_replacement(hash_map *macros, list *tokens, token *_in_token, uint8_t self_reference, uint8_t zero_unmatched) {
     macro *_macro;
     _macro = (macro *) hmp_get(macros, (void *) _in_token->content);
 
@@ -761,18 +844,26 @@ int8_t _macro_replacement(hash_map *macros, list *tokens, token *_in_token, uint
         token *_token;
         list_iterator *iterator = lst_iterator(_macro->tokens);
 
-        while ( (_token = (token *) lst_next(iterator) ) ) {
-            _macro_replacement(macros, tokens, _token, strcmp(_token->content, _in_token->content) ? 0 : 1 );
+        while ((_token = (token *) lst_next(iterator))) {
+            if (_token->type == TOT_IDENTIFIER) {
+                _macro_replacement(macros, tokens, _token, strcmp(_token->content, _in_token->content) ? 0 : 1, zero_unmatched);
+            }
         }
     }
     else {
-        lst_append(tokens, (void *) _in_token);
+        token *_put_token;
+        _put_token = _in_token;
+        if (zero_unmatched && _in_token->type == TOT_IDENTIFIER) {
+            _put_token = _token_alloc(0, 0, TOT_NUMBER, "0L", 2);
+        }
+        
+        lst_append(tokens, (void *) _put_token);
     }
 
     return 0;
 }
 
-int8_t macro_replacement(preprocessor_state *state, token *_in_token, int32_t offset) {
+int8_t macro_replacement(preprocessor_state *state, token *_in_token, int32_t offset, uint8_t zero_unmatched) {
     list          *tokens;
     list_iterator *iterator;
     logical_line  *line;
@@ -780,7 +871,7 @@ int8_t macro_replacement(preprocessor_state *state, token *_in_token, int32_t of
     tokens   = lst_create(&token_free, TOKEN_LIST_QUANTUM);
     iterator = lst_iterator(tokens);
 
-    _macro_replacement(state->macros, tokens, _in_token, 0);
+    _macro_replacement(state->macros, tokens, _in_token, 0, zero_unmatched);
     line = (logical_line *) lst_tail(state->lines);
 
     if (offset < 0) {
