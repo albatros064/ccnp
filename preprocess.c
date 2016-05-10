@@ -839,7 +839,7 @@ int8_t _retoken_ifdef(preprocessor_state *state, logical_line *_line) {
 int8_t _macro_replacement(hash_map *macros, list *tokens, token *_in_token, uint8_t self_reference, uint8_t zero_unmatched) {
     macro *_macro;
 
-    if (_in_token->type === TOT_IDENTIFIER) {
+    if (_in_token->type == TOT_IDENTIFIER) {
         _macro = (macro *) hmp_get(macros, (void *) _in_token->content);
     }
     else {
