@@ -838,16 +838,20 @@ int8_t _retoken_ifdef(preprocessor_state *state, logical_line *_line) {
 
 int8_t _macro_replacement(hash_map *macros, list *tokens, token *_in_token, uint8_t self_reference, uint8_t zero_unmatched) {
     macro *_macro;
-    _macro = (macro *) hmp_get(macros, (void *) _in_token->content);
+
+    if (_in_token->type === TOT_IDENTIFIER) {
+        _macro = (macro *) hmp_get(macros, (void *) _in_token->content);
+    }
+    else {
+        _macro = 0;
+    }
 
     if (_macro && !self_reference) {
         token *_token;
         list_iterator *iterator = lst_iterator(_macro->tokens);
 
         while ((_token = (token *) lst_next(iterator))) {
-            /*if (_token->type == TOT_IDENTIFIER) {*/
-                _macro_replacement(macros, tokens, _token, strcmp(_token->content, _in_token->content) ? 0 : 1, zero_unmatched);
-            /*}*/
+            _macro_replacement(macros, tokens, _token, strcmp(_token->content, _in_token->content) ? 0 : 1, zero_unmatched);
         }
     }
     else {
