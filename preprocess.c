@@ -845,9 +845,9 @@ int8_t _macro_replacement(hash_map *macros, list *tokens, token *_in_token, uint
         list_iterator *iterator = lst_iterator(_macro->tokens);
 
         while ((_token = (token *) lst_next(iterator))) {
-            if (_token->type == TOT_IDENTIFIER) {
+            /*if (_token->type == TOT_IDENTIFIER) {*/
                 _macro_replacement(macros, tokens, _token, strcmp(_token->content, _in_token->content) ? 0 : 1, zero_unmatched);
-            }
+            /*}*/
         }
     }
     else {
