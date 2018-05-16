@@ -1,10 +1,10 @@
 #include "preprocess.h"
-#include "container.h"
 #include "message.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 struct {
     char *label;
@@ -161,7 +161,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
                 break;
             case TOT_IDENTIFIER:
                 if (isalnum(c) || c == '_' || (c == '$' && DOLLAR_IS_LETTER) ) {
-                    /* Proceed */
+                    /* continue */
                 }
                 else if (ispunct(c) && c != '$' && c != '@') {
                     generate = 1;
@@ -183,29 +183,28 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
                      (  c     == '.' || c     == '_') ||
                      ( (c     == '+' || c     == '-') &&
                        (co[0] == 'e' || co[0] == 'E'  || co[0] == 'p' || co[0] == 'P') ) ) {
-                }
-                else if (c == '"') {
-                    generate = 1;
-                    suppress = 1;
-                    state->token_type = TOT_STRING;
-                }
-                else if (c == '\'') {
-                    generate = 1;
-                    suppress = 1;
-                    state->token_type = TOT_CHARACTER;
-                }
-                else if (isspace(c) ) {
-                    generate = 1;
-                    suppress = 1;
-                    state->token_type = TOT_NONE;
-                }
-                else if (ispunct(c) && c != '$' && c != '@') {
-                    generate = 1;
-                    state->token_type = TOT_PUNCTUATOR;
+                    /* continue */
                 }
                 else {
                     generate = 1;
-                    state->token_type = TOT_OTHER;
+                    if (c == '"') {
+                        suppress = 1;
+                        state->token_type = TOT_STRING;
+                    }
+                    else if (c == '\'') {
+                        suppress = 1;
+                        state->token_type = TOT_CHARACTER;
+                    }
+                    else if (isspace(c) ) {
+                        suppress = 1;
+                        state->token_type = TOT_NONE;
+                    }
+                    else if (ispunct(c) && c != '$' && c != '@') {
+                        state->token_type = TOT_PUNCTUATOR;
+                    }
+                    else {
+                        state->token_type = TOT_OTHER;
+                    }
                 }
                 break;
             case TOT_PUNCTUATOR:
@@ -383,6 +382,11 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 
     fclose(stream);
 
+    if (if_top(state) != PREP_IF_BASELINE) {
+        message_out(MESSAGE_ERROR, file_name, line_number, 0, "Unmatched #if state.");
+    }
+    if_pop(state);
+
     return 0;
 }
 
@@ -497,6 +501,8 @@ void if_free(void *data) {
 void if_push(preprocessor_state *state, uint8_t if_state) {
     uint8_t *t;
     t = (uint8_t *) malloc(sizeof(uint8_t));
+    *t = if_state;
+
     lst_append(state->if_stack, t);
 }
 uint8_t if_pop(preprocessor_state *state) {
@@ -622,6 +628,7 @@ int8_t process_directive(preprocessor_state *state) {
                 if (state->directive_line == PREP_IF) {
                     if_push(state, PREP_IF_MATCHING);
                 }
+
                 /* Check for unmatched directives. In this case, #elif is the only one we're worried about. */
                 if (if_top(state) == PREP_IF_BASELINE) {
                     message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "Unmatched #elif.");
@@ -663,7 +670,9 @@ int8_t process_directive(preprocessor_state *state) {
                 if (token_count > 2) {
                     message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "Additional tokens at end of #else directive (ignored).");
                 }
+                /* Pop #if state. */
                 if_result = if_pop(state);
+                /* Check for matched directives. */
                 if (if_result == PREP_IF_BASELINE) {
                     message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "Unmatched #else.");
                     return -1;
@@ -724,6 +733,7 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
     token         *_token;
     list_iterator *tokens;
     int32_t        token_count;
+    int16_t        evaluation_depth;
 
     tokens = lst_iterator(_line->tokens);
 
@@ -773,7 +783,7 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
                     }
 
                     lst_append(_replacements, _replacement_token);
-                    lst_splice(_line->tokens, _replacements, tokens->_index - 1, guarded ? 3 : 1);
+                    lst_splice(_line->tokens, _replacements, tokens->_index - 1, guarded ? 4 : 2);
                 }
                 else {
                     return -1;
@@ -782,9 +792,11 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
             else {
                 macro_replacement(state, _token, tokens->_index - 1, 1);
             }
+            lst_prev(tokens);
             break;
           case TOT_PUNCTUATOR:
             /* This should filter out any inappropriate punctuators, I guess. */
+            
             break;
           case TOT_STRING:
             /* Throw an error. We don't want no strings around these parts. */
@@ -792,6 +804,24 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
             break;
           case TOT_CHARACTER:
             /* This should just be treated as an int, so... replace it with a string representation of its int value? I'm not sure. */
+            break;
+          case TOT_NUMBER:
+            if (_token->content[0] == '0') {
+                if (!_token->content[1]) {
+                    /* Value is 0 */
+                }
+                /* Expecting hex or octal constant */
+                else if (_token->content[1] && (_token->content[1] == 'x' || _token->content[1] == 'X')) {
+                    /* Expecting hex constant. */
+                }
+                else if (_token->content[1] && (_token->content[1] >= '0' && _token->content[1] <= '9')) {
+                    /* Expecting octal constant. */
+                }
+            }
+            else if (_token->content[0] >= '1' && _token->content[0] <= '9') {
+                /* Expecting decimal constant. */
+            }
+            message_out(MESSAGE_WARN, "Got a number!", 0, 0, _token->content);
             break;
           default:
             break;

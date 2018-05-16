@@ -13,3 +13,4 @@ void message_out(unsigned char message_type, char *file, unsigned int line, unsi
     
     printf("%s:%d:%d: %s: %s\n", file, line, ch, t, message);
 }
+

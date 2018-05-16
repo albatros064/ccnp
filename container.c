@@ -1,7 +1,6 @@
 #include "container.h"
 
 #include <stdlib.h>
-#include <stdint.h>
 
 void _lst_increase_size(list *_list) {
     _list->_data = (void **) realloc(_list->_data, sizeof(void *) * (_list->_capacity + _list->_quantum) );
