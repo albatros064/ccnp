@@ -24,6 +24,9 @@ struct {
     { "line"   , PREP_LINE    }
 };
 
+void   null_free(void *);
+int8_t null_compare(void *, void *);
+
 void line_free (void *);
 void token_free(void *);
 
@@ -729,11 +732,16 @@ int8_t process_directive(preprocessor_state *state) {
     return 0;
 }
 
+#define PREP_IF_PARSE_NUMBER 1
+#define PREP_IF_PARSE_PUNC   2
+
 int8_t handle_if(preprocessor_state *state, logical_line *_line) {
     token         *_token;
     list_iterator *tokens;
     int32_t        token_count;
     int16_t        evaluation_depth;
+    int8_t         parse_state;
+    binary_tree   *computation_tree;
 
     tokens = lst_iterator(_line->tokens);
 
@@ -743,6 +751,9 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
 
     /* Keep track of how many tokens we have right now */
     token_count = _line->tokens->count;
+
+    computation_tree = bt_create(0, null_free, null_compare);
+    parse_state = PREP_IF_PARSE_NUMBER;
 
     while (!lst_is_end(tokens)) {
         _token = (token *) lst_next(tokens);
@@ -795,37 +806,117 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
             lst_prev(tokens);
             break;
           case TOT_PUNCTUATOR:
-            /* This should filter out any inappropriate punctuators, I guess. */
-            
-            break;
-          case TOT_STRING:
-            /* Throw an error. We don't want no strings around these parts. */
-            return -1;
+
+            /* Disallow any assignment */
+            if (_token->content[1] == '=' && _token->content[0] != '=') {
+                goto handle_if_invalid_operator;
+            }
+            /* Disallow ++, --; allow <<, >>, == */
+            if (_token->content[0] == _token->content[1] &&
+                _token->content[0] != '=' &&
+                _token->content[0] != '<' && _token->content[0] != '>') {
+                goto handle_if_invalid_operator;
+            }
+
+            switch (_token->content[0]) {
+              case '(':
+                break;
+              case ')':
+                if (parse_state == PREP_IF_PARSE_NUMBER) {
+                    message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected ')'; number expected.");
+                    return -1;
+                }
+                else {
+                    /* Pop the evaluation stack. If we can't throw an error. */
+                }
+                break;
+              case '+':
+              case '-':
+                {
+                    binary_tree_node *operator_node;
+                    operator_node  = bt_node_create(computation_tree);
+                    operator_node->data = _token;
+                    if (parse_state == PREP_IF_PARSE_NUMBER) {
+                    }
+                    else {
+                        
+                    }
+                }
+                break;
+              case '*':
+              case '/':
+                if (parse_status == PREP_IF_PARSE_NUMBER) {
+                    goto handle_if_invalid_operator;
+                }
+                break;
+              case '=':
+              case '^':
+              case '~':
+              case '<':
+              case '>':
+                break;
+              case ':':
+              case '?':
+                message_out(MESSAGE_WARN, _line->file, _token->line_offset, _token->char_offset, "Ternary operator not yet implemented in preprocessor conditional.");
+              default:
+              handle_if_invalid_operator:
+                message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected operator.");
+                return -1;
+            }
             break;
           case TOT_CHARACTER:
-            /* This should just be treated as an int, so... replace it with a string representation of its int value? I'm not sure. */
-            break;
+            /* We'll decode this when we get around to parsing a number. It's just a number in disguise. */
           case TOT_NUMBER:
-            if (_token->content[0] == '0') {
-                if (!_token->content[1]) {
-                    /* Value is 0 */
-                }
-                /* Expecting hex or octal constant */
-                else if (_token->content[1] && (_token->content[1] == 'x' || _token->content[1] == 'X')) {
-                    /* Expecting hex constant. */
-                }
-                else if (_token->content[1] && (_token->content[1] >= '0' && _token->content[1] <= '9')) {
-                    /* Expecting octal constant. */
-                }
+            if (parse_status == PREP_IF_PARSE_NUMBER) {
+                binary_tree_node *number_node;
+                number_node = bt_node_create(computation_tree);
+                number_node->data = _token;
             }
-            else if (_token->content[0] >= '1' && _token->content[0] <= '9') {
-                /* Expecting decimal constant. */
+            else {
+                message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected number; operator expected.");
+                return -1;
             }
-            message_out(MESSAGE_WARN, "Got a number!", 0, 0, _token->content);
             break;
           default:
-            break;
+            /* Anything else is a problem. */
+            message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected token or string in preprocessor conditional.");
+            return -1;
         }
+    }
+
+    if (evaluate_tree(computation_tree)) {
+        return 1;
+    }
+
+    return 0;
+}
+
+int64_t evaluate_tree(binary_tree *tree) {
+    
+}
+
+int8_t _parse_number(token *_token, uint64_t *value) {
+    if (_token->type != TOT_NUMBER && _token->type != TOT_CHARACTER) {
+        return -1;
+    }
+
+    if (_token->content[0] == '0') {
+        if (!_token->content[1]) {
+            /* Value is 0 */
+            *value = 0;
+        }
+        else if (_token->content[1] && (_token->content[1] == 'x' || _token->content[1] == 'X')) {
+            /* Expecting hex constant. */
+        }
+        else if (_token->content[1] && (_token->content[1] >= '0' && _token->content[1] <= '9')) {
+            /* Expecting octal constant. */
+        }
+    }
+    else if (_token->content[0] >= '1' && _tokent->content[0] <= '9') {
+        /* Expecting decimal constant. */
+    }
+    else {
+        return -1;
     }
 
     return 0;
@@ -917,6 +1008,11 @@ int8_t macro_replacement(preprocessor_state *state, token *_in_token, int32_t of
     return 0;
 }
 
+void null_free(void *_null) {
+}
+int8_t null_compare(void *_a, void *_b) {
+    return 0;
+}
 
 void line_free(void *_line) {
     lst_destroy( ( (logical_line *) _line)->tokens);

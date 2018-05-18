@@ -3,10 +3,19 @@
 
 #include <stdint.h>
 
+#define COLLECTION_UNIQUE 1
+#define COLLECTION_RPLACE 2
+#define COLLECTION_SORTED 4
+#define COLLECTION_ASCEND 8
+
+#define COLLECTION_ERROR_EXISTS 1
+
 typedef void     (*container_free   )(void *);
 typedef int8_t   (*container_compare)(void *, void *);
 typedef uint32_t (*container_hash   )(void *, uint32_t);
 
+
+/* ARRAY LIST */
 typedef struct {
     uint32_t count;
 
@@ -42,6 +51,7 @@ int8_t lst_append (list *, void *);
 int8_t lst_prepend(list *, void *);
 
 
+/* HASH MAP */
 typedef struct {
     void *key;
     void *datum;
@@ -75,6 +85,53 @@ int8_t hmp_remove(hash_map *, void *);
 
 hash_map_iterator *hmp_iterator(hash_map *);
 hash_map_pair *hmp_next(hash_map_iterator *);
+
+
+/* LINKED LIST */
+struct _linked_list_node {
+    void *data;
+    struct _linked_list_node *tail;
+};
+
+typedef struct {
+    struct _linked_list_node *head;
+    struct _linked_list_node *tail;
+
+    unsigned char flags;
+
+    container_free    free;
+    container_compare compare;
+} linked_list;
+
+linked_list *ll_create(unsigned char, container_free, container_compare);
+int ll_destroy(linked_list *);
+int ll_append (linked_list *, void *);
+int ll_prepend(linked_list *, void *);
+int ll_insert (linked_list *, void *);
+int ll_count  (linked_list *);
+void *ll_find (linked_list *, void *);
+
+
+/* BINARY TREE */
+typedef struct _binary_tree_node {
+    void *data;
+    struct _binary_tree_node *left;
+    struct _binary_tree_node *right;
+} binary_tree_node;
+typedef struct _binary_tree {
+    binary_tree_node *root;
+
+    unsigned char flags;
+
+    container_free    free;
+    container_compare compare;
+} binary_tree;
+
+binary_tree *bt_create(unsigned char, container_free, container_compare);
+int bt_destroy(binary_tree *);
+int bt_insert (binary_tree *, void *);
+int bt_count  (binary_tree *);
+void *bt_find (binary_tree *, void *);
 
 #endif
 
