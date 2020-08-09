@@ -1,10 +1,13 @@
 #include "preprocess.h"
+#include "prep_eval.h"
 #include "message.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+
+#include "utilities.h"
 
 struct {
     char *label;
@@ -24,9 +27,6 @@ struct {
     { "line"   , PREP_LINE    }
 };
 
-void   null_free(void *);
-int8_t null_compare(void *, void *);
-
 void line_free (void *);
 void token_free(void *);
 
@@ -40,6 +40,8 @@ void     macro_free(void *);
 uint32_t macro_hash(void *, uint32_t);
 void     directive_free(void *);
 uint32_t directive_hash(void *, uint32_t);
+
+int64_t evaluate_rpn(stack *);
 
 int8_t macro_replacement(preprocessor_state *, token *, int32_t, uint8_t);
 int8_t process_directive(preprocessor_state *);
@@ -367,6 +369,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
             if (state->directive_line) {
                 if (process_directive(state)) {
                     message_out(MESSAGE_ERROR, file_name, line_number, char_number, "Oops");
+                    return -1;
                 }
             }
             
@@ -395,8 +398,10 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
 
 int8_t generate_line(preprocessor_state *state, unsigned int line, char *file) {
     logical_line *new_line;
+    uint8_t inclusion_state;
 
     new_line = (logical_line *) lst_tail(state->lines);
+    inclusion_state = if_top(state);
 
     /* Short-circuit on empty line to save memory */
     if (new_line && !new_line->tokens->count) {
@@ -405,11 +410,19 @@ int8_t generate_line(preprocessor_state *state, unsigned int line, char *file) {
         return 0;
     }
 
-    new_line = (logical_line *) malloc(sizeof(logical_line) );
+    /* Make sure we don't include anything that we aren't supposed to include.
+     * If we're not including the current line, we discard its tokens. */
+    if (inclusion_state != PREP_IF_BASELINE && inclusion_state != PREP_IF_INCLUDING) {
+        lst_destroy(new_line->tokens);
+    }
+    else {
+        new_line = (logical_line *) malloc(sizeof(logical_line) );
+        lst_append(state->lines, (void *) new_line);
+    }
+
     new_line->start_line = line;
     new_line->file = file;
     new_line->tokens = lst_create(&token_free, TOKEN_LIST_QUANTUM);
-    lst_append(state->lines, (void *) new_line);
 
     return 0;
 }
@@ -422,6 +435,7 @@ token *_token_alloc(int char_offset, int line_offset, char token_type, char *con
     _token->char_offset = char_offset;
     _token->line_offset = line_offset;
     _token->content = 0;
+    _token->length = 0;
     _token->type = token_type;
 
     if (content != 0) {
@@ -429,6 +443,7 @@ token *_token_alloc(int char_offset, int line_offset, char token_type, char *con
         for (i = 0; i < content_length; ++i) {
             _token->content[i] = content[i];
         }
+        _token->length = content_length;
     }
 
     return _token;
@@ -619,7 +634,7 @@ int8_t process_directive(preprocessor_state *state) {
             case PREP_ELIF:
                 /* Handled mostly the same way as #if. Fall through. */
             case PREP_IF:
-                message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "#if implimentation incomplete.");
+                /*message_out(MESSAGE_WARN, _line->file, _line->start_line, 0, "#if implementation incomplete.");*/
 
                 /* Error out on missing required tokens. */
                 if (token_count < 3) {
@@ -740,8 +755,8 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
     list_iterator *tokens;
     int32_t        token_count;
     int16_t        evaluation_depth;
-    int8_t         parse_state;
-    binary_tree   *computation_tree;
+
+    evaluation_state *eval_state;
 
     tokens = lst_iterator(_line->tokens);
 
@@ -752,14 +767,17 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
     /* Keep track of how many tokens we have right now */
     token_count = _line->tokens->count;
 
-    computation_tree = bt_create(0, null_free, null_compare);
-    parse_state = PREP_IF_PARSE_NUMBER;
+    eval_state = eval_init();
+
+    print_line(_line->tokens);
+    printf("\n");
 
     while (!lst_is_end(tokens)) {
         _token = (token *) lst_next(tokens);
+
         switch (_token->type) {
           case TOT_IDENTIFIER:
-            if (!strcmp(_token->content, "defined")) {
+            if (strcmp(_token->content, "defined") == 0) {
                 /* check for optional parenthesis surrounding a required identifier */
                 token *next;
                 uint8_t guarded;
@@ -803,7 +821,8 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
             else {
                 macro_replacement(state, _token, tokens->_index - 1, 1);
             }
-            lst_prev(tokens);
+
+            lst_seek(tokens, tokens->_index - 1);
             break;
           case TOT_PUNCTUATOR:
 
@@ -819,41 +838,26 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
             }
 
             switch (_token->content[0]) {
-              case '(':
-                break;
               case ')':
-                if (parse_state == PREP_IF_PARSE_NUMBER) {
-                    message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected ')'; number expected.");
+                if (eval_state->operator_last) {
+                    message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected ')'; expression expected.");
                     return -1;
                 }
-                else {
-                    /* Pop the evaluation stack. If we can't throw an error. */
-                }
-                break;
+              case '(':
               case '+':
               case '-':
-                {
-                    binary_tree_node *operator_node;
-                    operator_node  = bt_node_create(computation_tree);
-                    operator_node->data = _token;
-                    if (parse_state == PREP_IF_PARSE_NUMBER) {
-                    }
-                    else {
-                        
-                    }
-                }
-                break;
               case '*':
               case '/':
-                if (parse_status == PREP_IF_PARSE_NUMBER) {
-                    goto handle_if_invalid_operator;
-                }
-                break;
+              case '%':
               case '=':
               case '^':
               case '~':
+              case '!':
               case '<':
               case '>':
+                if (eval_add_operator(eval_state, _token) != 0) {
+                    return -1;
+                }
                 break;
               case ':':
               case '?':
@@ -865,15 +869,14 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
             }
             break;
           case TOT_CHARACTER:
-            /* We'll decode this when we get around to parsing a number. It's just a number in disguise. */
+            /* We'll decode this when we get around to parsing a number.
+             * It's just a number in disguise. */
           case TOT_NUMBER:
-            if (parse_status == PREP_IF_PARSE_NUMBER) {
-                binary_tree_node *number_node;
-                number_node = bt_node_create(computation_tree);
-                number_node->data = _token;
-            }
-            else {
+            if (!eval_state->operator_last) {
                 message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected number; operator expected.");
+                return -1;
+            }
+            if (eval_add_number(eval_state, _token) != 0) {
                 return -1;
             }
             break;
@@ -884,15 +887,21 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
         }
     }
 
-    if (evaluate_tree(computation_tree)) {
-        return 1;
+    if (eval_final(eval_state) < 0) {
+        return -1;
+    }
+
+    {
+        int32_t eval_result = 0;
+        if (eval_rpn(eval_state, &eval_result) < 0) {
+            return -1;
+        }
+        if (eval_result != 0) {
+            return 1;
+        }
     }
 
     return 0;
-}
-
-int64_t evaluate_tree(binary_tree *tree) {
-    
 }
 
 int8_t _parse_number(token *_token, uint64_t *value) {
@@ -912,7 +921,7 @@ int8_t _parse_number(token *_token, uint64_t *value) {
             /* Expecting octal constant. */
         }
     }
-    else if (_token->content[0] >= '1' && _tokent->content[0] <= '9') {
+    else if (_token->content[0] >= '1' && _token->content[0] <= '9') {
         /* Expecting decimal constant. */
     }
     else {
@@ -1005,12 +1014,6 @@ int8_t macro_replacement(preprocessor_state *state, token *_in_token, int32_t of
 
     lst_splice(line->tokens, tokens, offset, 1);
 
-    return 0;
-}
-
-void null_free(void *_null) {
-}
-int8_t null_compare(void *_a, void *_b) {
     return 0;
 }
 

@@ -14,6 +14,9 @@ typedef void     (*container_free   )(void *);
 typedef int8_t   (*container_compare)(void *, void *);
 typedef uint32_t (*container_hash   )(void *, uint32_t);
 
+void   null_free(void *);
+int8_t null_compare(void *, void *);
+
 
 /* ARRAY LIST */
 typedef struct {
@@ -23,8 +26,8 @@ typedef struct {
 
     uint16_t _quantum;
     uint32_t _capacity;
-    container_free    _free;
-} list;
+    container_free _free;
+} list, stack;
 
 typedef struct {
     list *_list;
@@ -36,19 +39,30 @@ int8_t lst_destroy(list *);
 
 list_iterator *lst_iterator(list *);
 int8_t lst_iterator_destroy(list_iterator *);
-void *lst_index(list *, uint32_t);
-void *lst_head (list *);
-void *lst_tail (list *);
-void *lst_next (list_iterator *);
-void *lst_prev (list_iterator *);
-void *lst_peek (list_iterator *, uint32_t);
+void  *lst_index(list *, uint32_t);
+void  *lst_head (list *);
+void  *lst_tail (list *);
+int8_t lst_empty(list *);
+void  *lst_next (list_iterator *);
+void  *lst_prev (list_iterator *);
+void  *lst_peek (list_iterator *, uint32_t);
+void  *lst_seek (list_iterator *, uint32_t);
 int8_t lst_is_end(list_iterator *);
 
-int8_t lst_insert (list *, void *, uint32_t);
-int8_t lst_splice (list *, list *, uint32_t, uint32_t);
-int8_t lst_trim   (list *, uint32_t);
-int8_t lst_append (list *, void *);
-int8_t lst_prepend(list *, void *);
+int8_t  lst_insert (list *, void *, uint32_t);
+int8_t  lst_splice (list *, list *, uint32_t, uint32_t);
+int8_t  lst_trim   (list *, uint32_t);
+int8_t  lst_append (list *, void *);
+int8_t  lst_prepend(list *, void *);
+#define lst_push   lst_append
+void   *lst_pop    (list *);
+
+#define st_create  lst_create
+#define st_destroy lst_destroy
+#define st_top     lst_tail
+#define st_empty   lst_empty
+#define st_push    lst_append
+#define st_pop     lst_pop
 
 
 /* HASH MAP */
@@ -132,6 +146,8 @@ int bt_destroy(binary_tree *);
 int bt_insert (binary_tree *, void *);
 int bt_count  (binary_tree *);
 void *bt_find (binary_tree *, void *);
+
+binary_tree_node *bt_node_create(binary_tree *);
 
 #endif
 

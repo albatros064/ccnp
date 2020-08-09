@@ -40,7 +40,6 @@
 #define TOKEN_BUFFER_SIZE 64
 #define TOKEN_LIST_SIZE   64
 
-
 #define TOKEN_LIST_QUANTUM 8
 
 #define PREP_IF_STACK_QUANTUM 8
@@ -48,6 +47,7 @@
 #define PREP_IF_MATCHING  1
 #define PREP_IF_INCLUDING 2
 #define PREP_IF_ENDING    3
+
 
 typedef struct {
     int   char_offset;
@@ -92,13 +92,12 @@ typedef struct {
 
 preprocessor_state *preprocess_init();
 
+
 int8_t generate_line (preprocessor_state *, unsigned int, char *);
 int8_t generate_token(preprocessor_state *, unsigned int, unsigned int);
 char *null_terminate(char *, unsigned int);
 
 int8_t preprocess(preprocessor_state *, char *);
-
-void print_lines(list *);
 
 #endif
 

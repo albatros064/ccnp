@@ -2,10 +2,10 @@
 
 #include <stdlib.h>
 
-
 /* ARRAY LIST */
 void _lst_increase_size(list *_list) {
-    _list->_data = (void **) realloc(_list->_data, sizeof(void *) * (_list->_capacity + _list->_quantum) );
+    _list->_data = (void **) realloc(_list->_data, sizeof(void *) *
+        (_list->_capacity + _list->_quantum) );
     _list->_capacity += _list->_quantum;
 }
 
@@ -78,6 +78,10 @@ void *lst_tail(list *_list) {
     return 0;
 }
 
+int8_t lst_empty(list *_list) {
+    return _list->count <= 0;
+}
+
 void *lst_next(list_iterator *iterator) {
     if (iterator->_index >= iterator->_list->count) {
         return 0;
@@ -107,6 +111,16 @@ void *lst_peek(list_iterator *iterator, uint32_t offset) {
     }
 
     return iterator->_list->_data[iterator->_index + offset];
+}
+
+void *lst_seek(list_iterator *iterator, uint32_t position) {
+    if (position >= iterator->_list->count) {
+        position = iterator->_list->count - 1;
+    }
+    if (position < 0) {
+        position = 0;
+    }
+    iterator->_index = position;
 }
 
 int8_t lst_is_end(list_iterator *iterator) {
@@ -199,6 +213,13 @@ int8_t lst_append(list *_list, void *_datum) {
 int8_t lst_prepend(list *_list, void *_datum) {
     return lst_insert(_list, _datum, 0);
 }
+
+void *lst_pop(list *_list) {
+    void *_tail = lst_tail(_list);
+    lst_trim(_list, _list->count - 1);
+    return _tail;
+}
+
 
 
 
@@ -571,3 +592,12 @@ int bt_insert(binary_tree *tree, void *data) {
 binary_tree_node *bt_node_create(binary_tree *tree) {
     return (binary_tree_node *) malloc(sizeof(binary_tree_node));
 }
+
+
+/* NULL */
+void null_free(void *_null) {
+}
+int8_t null_compare(void *_a, void *_b) {
+    return 0;
+}
+
