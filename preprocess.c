@@ -1,6 +1,7 @@
 #include "preprocess.h"
 #include "prep_eval.h"
 #include "message.h"
+#include "errors.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -354,6 +355,7 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
             if (generate) {
                 tline_number = line_number;
                 tchar_number = char_number;
+                state->token_overflow = 0;
             }
 
             generate = 0;
@@ -368,7 +370,6 @@ int8_t preprocess(preprocessor_state *state, char *file_name) {
             /* Handle preprocessor directive lines */
             if (state->directive_line) {
                 if (process_directive(state)) {
-                    message_out(MESSAGE_ERROR, file_name, line_number, char_number, "Oops");
                     return -1;
                 }
             }
@@ -544,6 +545,7 @@ int8_t process_directive(preprocessor_state *state) {
 
     uint32_t token_count;
     uint8_t  die;
+    uint8_t  inclusion_state;
 
     int8_t if_result;
 
@@ -556,6 +558,21 @@ int8_t process_directive(preprocessor_state *state) {
     die = 0;
 
     _line = (logical_line *) lst_tail(state->lines);
+
+    /* Make sure we don't include anything that we aren't supposed to include.
+     * If not including, ignore all but #else #endif #elif */
+    inclusion_state = if_top(state);
+    if (inclusion_state != PREP_IF_BASELINE && inclusion_state != PREP_IF_INCLUDING) {
+        if (state->directive_line != PREP_ELSE &&
+            state->directive_line != PREP_ENDIF &&
+            state->directive_line != PREP_ELIF
+        ) {
+            _line->tokens->count = 0;
+            state->directive_line = PREP_NONE;
+            state->token_type     = TOT_NONE;
+            return 0;
+        }
+    }
 
     token_count = _line->tokens->count;
 
@@ -659,7 +676,6 @@ int8_t process_directive(preprocessor_state *state) {
 
                     if_result = handle_if(state, _line);
                     if (if_result < 0) {
-                        message_out(MESSAGE_ERROR, _line->file, _line->start_line, 0, "#if evaluation failed.");
                         return -1;
                     }
 
@@ -769,9 +785,6 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
 
     eval_state = eval_init();
 
-    print_line(_line->tokens);
-    printf("\n");
-
     while (!lst_is_end(tokens)) {
         _token = (token *) lst_next(tokens);
 
@@ -841,7 +854,7 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
               case ')':
                 if (eval_state->operator_last) {
                     message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected ')'; expression expected.");
-                    return -1;
+                    return ERR_EVAL_PAREN;
                 }
               case '(':
               case '+':
@@ -856,7 +869,8 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
               case '<':
               case '>':
                 if (eval_add_operator(eval_state, _token) != 0) {
-                    return -1;
+                    message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, get_error_string(ERR_EVAL_OPERATOR));
+                    return ERR_EVAL_OPERATOR;
                 }
                 break;
               case ':':
@@ -864,8 +878,8 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
                 message_out(MESSAGE_WARN, _line->file, _token->line_offset, _token->char_offset, "Ternary operator not yet implemented in preprocessor conditional.");
               default:
               handle_if_invalid_operator:
-                message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected operator.");
-                return -1;
+                message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, get_error_string(ERR_EVAL_OPERATOR));
+                return ERR_EVAL_OPERATOR;
             }
             break;
           case TOT_CHARACTER:
@@ -873,8 +887,8 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
              * It's just a number in disguise. */
           case TOT_NUMBER:
             if (!eval_state->operator_last) {
-                message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, "Unexpected number; operator expected.");
-                return -1;
+                message_out(MESSAGE_ERROR, _line->file, _token->line_offset, _token->char_offset, get_error_string(ERR_EVAL_NUMBER));
+                return ERR_EVAL_NUMBER;
             }
             if (eval_add_number(eval_state, _token) != 0) {
                 return -1;
@@ -892,9 +906,12 @@ int8_t handle_if(preprocessor_state *state, logical_line *_line) {
     }
 
     {
+        int8_t eval_error;
         int32_t eval_result = 0;
-        if (eval_rpn(eval_state, &eval_result) < 0) {
-            return -1;
+
+        eval_error = eval_rpn(eval_state, &eval_result);
+        if (eval_error < 0) {
+            return eval_error;
         }
         if (eval_result != 0) {
             return 1;

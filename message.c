@@ -11,6 +11,6 @@ void message_out(unsigned char message_type, char *file, unsigned int line, unsi
         t = "warning";
     }
     
-    printf("%s:%d:%d: %s: %s\n", file, line, ch, t, message);
+    printf("%s:%d:%d: %s: %s\n", file, line, ch+1, t, message);
 }
 

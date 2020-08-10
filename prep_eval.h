@@ -20,15 +20,6 @@
 
 #define EVAL_STACK_QUANTUM 8
 
-#define EVAL_ERR                -1
-#define EVAL_ERR_DIV_ZERO       -3
-#define EVAL_ERR_RPN_EMPTY      -5
-#define EVAL_ERR_OPERATOR       -6
-
-#define EVAL_ERR_NUMBER_FLOAT   -32
-#define EVAL_ERR_NUMBER_OCTAL   -33
-#define EVAL_ERR_NUMBER_SUFFIX  -34
-
 #define EVAL_NUMBER_MODE_NONE    0
 #define EVAL_NUMBER_MODE_HEX     1
 #define EVAL_NUMBER_MODE_DECIMAL 2

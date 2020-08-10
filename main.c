@@ -3,9 +3,8 @@
 #include "container.h"
 
 #include "utilities.h"
+#include <stdio.h>
 
-
-#define SOMETHING_INTERESTING is about>to< <<happen>>here
 
 int main(int argc, char **argv) {
     list *lines;

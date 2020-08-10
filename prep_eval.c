@@ -1,10 +1,11 @@
 #include "prep_eval.h"
 #include "message.h"
+#include "errors.h"
 
 #include "utilities.h"
 
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 evaluation_state *eval_init() {
     evaluation_state *state = (evaluation_state *) malloc(sizeof(evaluation_state));
@@ -159,9 +160,10 @@ int8_t eval_rpn(evaluation_state* state, int32_t *ret) {
     uint8_t is_binary, is_rtl;
     int8_t  ret_code;
     char a, b;
+    evaluation_node *iter_token;
 
     if (st_empty(state->evaluation)) {
-        return EVAL_ERR_RPN_EMPTY;
+        return ERR_EVAL_RPN_EMPTY;
     }
 
     node = st_pop(state->evaluation);
@@ -215,7 +217,7 @@ int8_t eval_rpn(evaluation_state* state, int32_t *ret) {
             break;
         case '/':
             if (r == 0) {
-                return EVAL_ERR_DIV_ZERO;
+                return ERR_EVAL_DIV_ZERO;
             }
             *ret = l / r;
             break;
@@ -272,7 +274,7 @@ int8_t eval_rpn(evaluation_state* state, int32_t *ret) {
             *ret = l ^ r;
             break;
         default:
-            return EVAL_ERR_OPERATOR;
+            return ERR_EVAL_OPERATOR;
     }
     
     return 0;
@@ -285,12 +287,18 @@ int8_t _eval_parse_int32(token *_token, int32_t *ret) {
 
     parse_mode = EVAL_NUMBER_MODE_NONE;
 
+    if (_token->type == TOT_CHARACTER) {
+        /* TODO: escape sequences, multi-char values */
+        *ret = _token->content[0];
+        return 0;
+    }
+
     *ret = 0;
     for (int i = 0; i < _token->length; i++) {
         c = _token->content[i];
 
         if (c == '.') {
-            return EVAL_ERR_NUMBER_FLOAT;
+            return ERR_EVAL_NUMBER_FLOAT;
         }
 
         if (c > 0x40) {
@@ -307,7 +315,7 @@ int8_t _eval_parse_int32(token *_token, int32_t *ret) {
                     goto parse_eval_number_decimal;
                 }
                 else {
-                    return EVAL_ERR_NUMBER_FLOAT;
+                    return ERR_EVAL_NUMBER_FLOAT;
                 }
                 break;
             case EVAL_NUMBER_MODE_OCTAL:
@@ -320,7 +328,7 @@ int8_t _eval_parse_int32(token *_token, int32_t *ret) {
                     *ret += c - '0';
                 }
                 else if (c == '8' || c == '9') {
-                    return EVAL_ERR_NUMBER_OCTAL;
+                    return ERR_EVAL_NUMBER_OCTAL;
                 }
                 else {
                     s = c;
@@ -355,14 +363,14 @@ int8_t _eval_parse_int32(token *_token, int32_t *ret) {
             case EVAL_NUMBER_MODE_SUFFIX:
             default:
                 if (s != 'U' || c != 'L') {
-                    return EVAL_ERR_NUMBER_SUFFIX;
+                    return ERR_EVAL_NUMBER_SUFFIX;
                 }
                 s = c;
                 break;
         }
     }
     if (s && s != 'L') {
-        return EVAL_ERR_NUMBER_SUFFIX;
+        return ERR_EVAL_NUMBER_SUFFIX;
     }
 
     return 0;
